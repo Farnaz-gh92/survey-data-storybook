@@ -1,0 +1,10 @@
+.Rhistory
+.RData
+.Rproj.user/
+.r-lib/
+*.utf8.md
+*.knit.md
+*_files/
+*_cache/
+/Week4_Exercise.pdf
+
