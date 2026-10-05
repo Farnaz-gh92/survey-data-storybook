@@ -1,0 +1,286 @@
+---
+title: "A Visual Walk Through NHANES"
+author: "Farnaz"
+date: "October 4, 2026"
+output:
+  html_document:
+    theme: flatly
+    highlight: kate
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    code_folding: hide
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center",
+  out.width = "92%"
+)
+pacman::p_load(tidyverse, cowplot, ggpubr, DT, here)
+
+nhanes_data <- read_csv(
+  here("datasets", "cleaned_NHANES.csv"),
+  show_col_types = FALSE
+) %>%
+  mutate(gender = factor(gender))
+
+diet <- read_csv(
+  here("datasets", "diet.csv"),
+  show_col_types = FALSE
+)
+```
+
+# Exercise 1 {.tabset}
+
+## Two separate views
+
+```{r exercise-1-separate, fig.width=8, fig.height=4.8}
+age_gender <- ggplot(
+  nhanes_data,
+  aes(x = age, colour = gender, fill = gender)
+) +
+  geom_density(alpha = 0.25, linewidth = 0.9) +
+  scale_colour_manual(values = c("#D55E00", "#0072B2")) +
+  scale_fill_manual(values = c("#D55E00", "#0072B2")) +
+  labs(
+    title = "Age distributions are similar across genders",
+    x = "Age (years)",
+    y = "Density",
+    colour = "Gender",
+    fill = "Gender"
+  ) +
+  theme_classic()
+
+ethnicity_mix <- ggplot(
+  nhanes_data,
+  aes(x = ethnicity_2, fill = gender)
+) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c("#D55E00", "#0072B2")) +
+  labs(
+    title = "Gender counts across ethnicity groups",
+    x = NULL,
+    y = "Participants",
+    fill = "Gender"
+  ) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1))
+
+age_gender
+ethnicity_mix
+```
+
+The density plot emphasizes the shape of each age distribution. The grouped
+bars answer a different question by showing the sample counts within each
+ethnicity group.
+
+## Shared-legend comparison
+
+```{r exercise-1-combined, fig.width=10, fig.height=4.8}
+ggpubr::ggarrange(
+  age_gender,
+  ethnicity_mix,
+  ncol = 2,
+  common.legend = TRUE,
+  legend = "bottom"
+)
+```
+
+For a single-page comparison, I prefer the shared legend because it gives the
+long category labels more room. The separate display is easier when each plot
+needs to stand on its own.
+
+# Exercise 2
+
+```{r exercise-2-table}
+display_table <- nhanes_data %>%
+  select(
+    patient_id,
+    wave_id,
+    gender,
+    age,
+    ethnicity_2,
+    education
+  )
+
+DT::datatable(
+  display_table,
+  rownames = FALSE,
+  filter = "bottom",
+  class = "stripe hover compact",
+  options = list(
+    pageLength = 8,
+    autoWidth = TRUE,
+    scrollX = TRUE
+  ),
+  caption = "Selected NHANES participant characteristics"
+)
+```
+
+```{r exercise-2-figures, fig.width=8, fig.height=4.8}
+age_plot <- ggplot(nhanes_data, aes(age, fill = gender)) +
+  geom_density(alpha = 0.35) +
+  scale_fill_manual(values = c("#E69F00", "#56B4E9")) +
+  labs(
+    title = "Age profiles overlap across genders",
+    x = "Age (years)",
+    y = "Density",
+    fill = "Gender"
+  ) +
+  theme_classic()
+
+gender_plot <- nhanes_data %>%
+  count(gender) %>%
+  ggplot(aes(x = reorder(gender, n), y = n, fill = gender)) +
+  geom_col(show.legend = FALSE, width = 0.68) +
+  coord_flip() +
+  scale_fill_manual(values = c("#E69F00", "#56B4E9")) +
+  labs(
+    title = "The sample is balanced by gender",
+    x = NULL,
+    y = "Participants"
+  ) +
+  theme_light()
+
+ethnicity_plot <- nhanes_data %>%
+  count(ethnicity_2) %>%
+  ggplot(aes(x = reorder(ethnicity_2, n), y = n)) +
+  geom_col(fill = "#E67E22", width = 0.72) +
+  coord_flip() +
+  labs(
+    title = "Detailed ethnicity composition",
+    x = NULL,
+    y = "Participants"
+  ) +
+  theme_classic()
+
+ggsave(
+  here("graphics", "farnaz_age_density.png"),
+  age_plot,
+  width = 7,
+  height = 4.5
+)
+ggsave(
+  here("graphics", "farnaz_gender_counts.png"),
+  gender_plot,
+  width = 7,
+  height = 4.5
+)
+ggsave(
+  here("graphics", "farnaz_ethnicity_detail.png"),
+  ethnicity_plot,
+  width = 7,
+  height = 4.5
+)
+
+age_plot
+gender_plot
+ethnicity_plot
+```
+
+I kept the detailed ethnicity variable because it provides more information
+about sample composition. The table supports exact lookups, while the ordered
+bars and density curves make the overall patterns quicker to see.
+
+# Exercise 3
+
+```{r exercise-3, fig.width=8.5, fig.height=5}
+diet_summary <- diet %>%
+  group_by(Week) %>%
+  summarise(
+    mean_weight = mean(Weight),
+    sd_weight = sd(Weight),
+    .groups = "drop"
+  )
+
+ggplot(diet_summary, aes(Week, mean_weight)) +
+  geom_ribbon(
+    aes(
+      ymin = mean_weight - sd_weight,
+      ymax = mean_weight + sd_weight
+    ),
+    fill = "#F5B041",
+    alpha = 0.30
+  ) +
+  geom_line(colour = "#C0392B", linewidth = 1.15) +
+  geom_point(colour = "#C0392B", size = 2.2) +
+  labs(
+    title = "Average weight moves downward over 16 weeks",
+    subtitle = "The shaded band is one standard deviation from the weekly mean",
+    x = "Study week",
+    y = "Mean weight"
+  ) +
+  theme_light()
+```
+
+The weekly summary removes the distracting participant legend. It keeps the
+group trend as the main message and uses the ribbon to show that participant
+weights still vary around the mean.
+
+# Exercise 4
+
+```{r exercise-4, fig.width=10, fig.height=5}
+bp <- nhanes_data %>%
+  mutate(
+    readings_available = rowSums(
+      !is.na(across(starts_with("systolic_bp_")))
+    ),
+    avg_sbp = rowMeans(
+      across(starts_with("systolic_bp_")),
+      na.rm = TRUE
+    ),
+    avg_sbp = if_else(
+      readings_available == 0,
+      NA_real_,
+      avg_sbp
+    ),
+    sbp_group = case_when(
+      avg_sbp < 120 ~ "Normal",
+      avg_sbp < 130 ~ "Elevated",
+      avg_sbp < 140 ~ "Stage 1",
+      TRUE ~ "Stage 2"
+    ),
+    sbp_group = factor(
+      sbp_group,
+      levels = c("Normal", "Elevated", "Stage 1", "Stage 2")
+    ),
+    age_group = cut(
+      age,
+      breaks = seq(0, 90, by = 5),
+      right = FALSE,
+      include.lowest = TRUE
+    )
+  ) %>%
+  filter(!is.na(age), !is.na(gender), !is.na(avg_sbp))
+
+ggplot(bp, aes(age_group, fill = sbp_group)) +
+  geom_bar(position = "dodge") +
+  facet_grid(. ~ gender) +
+  scale_fill_manual(
+    values = c(
+      "Normal" = "#56B4E9",
+      "Elevated" = "#E69F00",
+      "Stage 1" = "#D55E00",
+      "Stage 2" = "#9B59B6"
+    )
+  ) +
+  labs(
+    title = "Higher SBP categories become more common with age",
+    x = "Age group",
+    y = "Participants",
+    fill = "Average SBP"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The plot includes participants with age, gender, and at least one systolic blood
+pressure reading. Facets reduce visual crowding, and the ordered colours help
+the categories read from lower to higher blood pressure.
+

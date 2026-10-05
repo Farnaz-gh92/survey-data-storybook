@@ -8,10 +8,11 @@ and several ways to present the same analysis for different readers.
 
 - `analysis/week3/` contains the Week 3 R Markdown report.
 - `analysis/week4/` contains the interactive report, dashboard, and table report.
-- `datasets/` contains `diet.csv` and a compressed copy of the cleaned NHANES
-  data. Extract `cleaned_NHANES.zip` in that folder before knitting.
+- `datasets/` contains `diet.csv`. The larger `cleaned_NHANES.csv` remains in
+  the separate local Farnaz project; copy it into this folder before knitting.
 - `graphics/` contains figures created from the Week 3 analysis.
-- `deliverables/` contains the rendered HTML and PDF documents.
+- `deliverables/` contains the compact PDF table report. The larger rendered
+  HTML documents remain in the local project.
 - `citations/` contains the bibliography used in the table report.
 
 ## Week 4 work

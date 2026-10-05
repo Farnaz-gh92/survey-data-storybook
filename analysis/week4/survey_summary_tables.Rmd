@@ -1,0 +1,207 @@
+---
+title: "NHANES Wave Profiles"
+subtitle: "A concise table report"
+author: "Farnaz"
+date: "October 4, 2026"
+output:
+  pdf_document:
+    toc: true
+    number_sections: false
+    latex_engine: xelatex
+bibliography: ../../citations/sources.bib
+link-citations: true
+header-includes:
+  - \\usepackage{booktabs}
+  - \\usepackage{longtable}
+  - \\usepackage{array}
+  - \\usepackage{float}
+  - \\usepackage{xcolor}
+  - \\definecolor{accent}{HTML}{C65D21}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  size = "\\scriptsize"
+)
+options(width = 68)
+pacman::p_load(tidyverse, kableExtra, here)
+
+nhanes_data <- read_csv(
+  here("datasets", "cleaned_NHANES.csv"),
+  show_col_types = FALSE
+) %>%
+  mutate(
+    wave_id = as.character(wave_id),
+    readings_available = rowSums(
+      !is.na(across(starts_with("systolic_bp_")))
+    ),
+    avg_sbp = rowMeans(
+      across(starts_with("systolic_bp_")),
+      na.rm = TRUE
+    ),
+    avg_sbp = if_else(
+      readings_available == 0,
+      NA_real_,
+      avg_sbp
+    )
+  )
+
+table_style <- function(table_object) {
+  table_object %>%
+    kable_styling(
+      latex_options = c("striped", "hold_position"),
+      full_width = FALSE,
+      position = "center"
+    ) %>%
+    row_spec(0, bold = TRUE, color = "white", background = "#C65D21")
+}
+```
+
+# Purpose
+
+This report compares three NHANES waves using tables rather than figures. It
+answers the requested questions about sample size, gender, ethnicity, and
+systolic blood pressure. The cleaned data are derived from the National Health
+and Nutrition Examination Survey [@cdc_nhanes].
+
+# Sample size by wave
+
+```{r sample-table}
+sample_table <- nhanes_data %>%
+  count(wave_id, name = "Participants") %>%
+  arrange(wave_id)
+
+kbl(
+  sample_table,
+  booktabs = TRUE,
+  caption = "Number of participants in each survey wave",
+  col.names = c("Wave", "Participants"),
+  format.args = list(big.mark = ",")
+) %>%
+  table_style()
+```
+
+The 2015 wave has the largest sample. The number of participants is slightly
+smaller in each later wave.
+
+# Male participants
+
+```{r male-table}
+male_table <- nhanes_data %>%
+  group_by(wave_id) %>%
+  summarise(
+    total = n(),
+    male_n = sum(gender == "Male", na.rm = TRUE),
+    male_percent = 100 * male_n / total,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    male_percent = paste0(round(male_percent, 1), "%")
+  ) %>%
+  select(wave_id, male_n, male_percent)
+
+kbl(
+  male_table,
+  booktabs = TRUE,
+  caption = "Male count and percentage within each wave",
+  col.names = c("Wave", "Male participants", "Percent male"),
+  format.args = list(big.mark = ",")
+) %>%
+  table_style()
+```
+
+Male participants account for about half of each wave. The percentages are
+very similar, so no wave has a noticeably different gender balance.
+
+# Ethnicity composition
+
+```{r ethnicity-table}
+ethnicity_table <- nhanes_data %>%
+  count(ethnicity_2, wave_id, name = "n") %>%
+  group_by(wave_id) %>%
+  mutate(
+    percent = 100 * n / sum(n),
+    result = paste0(
+      format(n, big.mark = ","),
+      " (",
+      round(percent, 1),
+      "%)"
+    )
+  ) %>%
+  ungroup() %>%
+  select(ethnicity_2, wave_id, result) %>%
+  pivot_wider(names_from = wave_id, values_from = result)
+
+kbl(
+  ethnicity_table,
+  booktabs = TRUE,
+  caption = "Ethnicity counts with column percentages",
+  col.names = c("Ethnicity", "2015", "2016", "2017")
+) %>%
+  table_style() %>%
+  column_spec(1, width = "4.5cm")
+```
+
+The composition changes across waves, and the detailed ethnicity categories
+make those shifts visible. Each cell shows the count followed by the percentage
+within that wave.
+
+# Average systolic blood pressure
+
+```{r sbp-table}
+sbp_table <- nhanes_data %>%
+  filter(!is.na(avg_sbp)) %>%
+  group_by(wave_id) %>%
+  summarise(
+    available_n = n(),
+    mean = mean(avg_sbp),
+    sd = sd(avg_sbp),
+    median = median(avg_sbp),
+    minimum = min(avg_sbp),
+    maximum = max(avg_sbp),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    `Mean (SD)` = paste0(round(mean, 1), " (", round(sd, 1), ")"),
+    `Median [range]` = paste0(
+      round(median, 1),
+      " [",
+      round(minimum, 1),
+      ", ",
+      round(maximum, 1),
+      "]"
+    )
+  ) %>%
+  select(wave_id, available_n, `Mean (SD)`, `Median [range]`)
+
+kbl(
+  sbp_table,
+  booktabs = TRUE,
+  caption = "Summary of participant-level average systolic blood pressure",
+  col.names = c(
+    "Wave",
+    "Available n",
+    "Mean (SD)",
+    "Median [range]"
+  ),
+  format.args = list(big.mark = ",")
+) %>%
+  table_style()
+```
+
+The mean average systolic blood pressure is lowest in 2015 and highest in 2017.
+The available sample is smaller than the full wave sample because participants
+without any systolic blood pressure reading are excluded from this summary.
+
+# Conclusion
+
+The three waves have similar gender balance but differ in sample size,
+ethnicity composition, and average systolic blood pressure. Presenting counts,
+percentages, and summary statistics together gives both the scale and the
+relative pattern of each comparison.
+
+# References
+
