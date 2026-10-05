@@ -1,0 +1,79 @@
+---
+title: "NHANES Sample Snapshot"
+author: "Farnaz"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+pacman::p_load(tidyverse, flexdashboard, here)
+
+nhanes_data <- read_csv(
+  here("datasets", "cleaned_NHANES.csv"),
+  show_col_types = FALSE
+) %>%
+  mutate(
+    readings_available = rowSums(
+      !is.na(across(starts_with("systolic_bp_")))
+    ),
+    avg_sbp = rowMeans(
+      across(starts_with("systolic_bp_")),
+      na.rm = TRUE
+    ),
+    avg_sbp = if_else(
+      readings_available == 0,
+      NA_real_,
+      avg_sbp
+    )
+  )
+
+adult_percent <- mean(nhanes_data$age >= 21, na.rm = TRUE) * 100
+high_sbp_percent <- mean(nhanes_data$avg_sbp > 120, na.rm = TRUE) * 100
+```
+
+Row {data-height=650}
+-------------------------------------
+
+### Week 3 age distribution
+
+```{r age-figure}
+knitr::include_graphics(
+  here("graphics", "farnaz_age_density.png")
+)
+```
+
+Row {data-height=350}
+-------------------------------------
+
+### Participants age 21 or older
+
+```{r adult-gauge}
+gauge(
+  round(adult_percent, 1),
+  min = 0,
+  max = 100,
+  symbol = "%",
+  sectors = gaugeSectors(
+    success = c(60, 100),
+    warning = c(40, 60),
+    danger = c(0, 40),
+    colors = c("#27AE60", "#F39C12", "#C0392B")
+  )
+)
+```
+
+### Average SBP above 120 mmHg
+
+```{r sbp-value}
+valueBox(
+  value = paste0(round(high_sbp_percent, 1), "%"),
+  caption = "Participants with average SBP above 120",
+  icon = "fa-heartbeat",
+  color = "warning"
+)
+```
+
