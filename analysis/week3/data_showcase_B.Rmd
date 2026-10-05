@@ -1,0 +1,248 @@
+---
+title: "NHAES Data Showcase"
+author: "Farnaz"
+date: "September 27, 2026"
+output:
+  pdf_document:
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  size = "\\scriptsize"
+)
+options(width = 70)
+pacman::p_load(tidyverse, cowplot, ggpubr, here)
+
+nhanes_data <- read_csv(
+  here("datasets", "cleaned_NHANES.csv"),
+  show_col_types = FALSE
+)
+
+diet <- read_csv(
+  here("datasets", "diet.csv"),
+  show_col_types = FALSE
+)
+```
+
+# Exercise 1
+
+```{r exercise-1, fig.width=9, fig.height=4.8}
+nhanes_data <- nhanes_data %>%
+  mutate(
+    age_group = cut(age, breaks = seq(15, 90, 5), right = FALSE),
+    gender = factor(gender)
+  )
+
+age_gender <- ggplot(
+  nhanes_data,
+  aes(x = age, colour = gender, fill = gender)
+) +
+  geom_density(alpha = 0.25) +
+  labs(
+    title = "Age distributions by gender",
+    x = "Age (years)",
+    y = "Density",
+    colour = "Gender",
+    fill = "Gender"
+  ) +
+  theme_classic()
+
+ethnicity_mix <- ggplot(
+  nhanes_data,
+  aes(x = ethnicity_2, fill = gender)
+) +
+  geom_bar(position = "dodge") +
+  labs(
+    title = "Gender counts across detailed ethnicity",
+    x = "Ethnicity",
+    y = "Count",
+    fill = "Gender"
+  ) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1))
+
+ggpubr::ggarrange(
+  age_gender,
+  ethnicity_mix,
+  ncol = 2,
+  common.legend = TRUE,
+  legend = "bottom"
+)
+```
+
+I prefer `ggarrange()` because the shared legend leaves more room for the two
+plots. `plot_grid()` gives more control over relative widths, but separate
+legends take space away from the longer ethnicity labels.
+
+# Exercise 2
+
+```{r exercise-2, fig.width=7.5, fig.height=5}
+missing_summary <- nhanes_data %>%
+  summarise(
+    across(
+      c(age, gender, ethnicity_1, ethnicity_2),
+      ~ sum(is.na(.))
+    )
+  )
+missing_summary
+
+age_plot <- ggplot(nhanes_data, aes(age, fill = gender)) +
+  geom_density(alpha = 0.35) +
+  labs(
+    title = "Age profiles overlap across genders",
+    x = "Age (years)",
+    y = "Density",
+    fill = "Gender"
+  ) +
+  theme_classic()
+
+gender_plot <- nhanes_data %>%
+  count(gender) %>%
+  ggplot(aes(x = reorder(gender, n), y = n, fill = gender)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(
+    title = "Sample size by gender",
+    x = "Gender",
+    y = "Number of participants"
+  ) +
+  theme_light()
+
+ethnicity_plot <- nhanes_data %>%
+  count(ethnicity_2) %>%
+  ggplot(aes(x = reorder(ethnicity_2, n), y = n)) +
+  geom_col(fill = "#E67E22") +
+  coord_flip() +
+  labs(
+    title = "Detailed ethnicity classification",
+    x = "Ethnicity",
+    y = "Count"
+  ) +
+  theme_classic()
+
+age_plot
+gender_plot
+ethnicity_plot
+
+ggsave(
+  here("graphics", "farnaz_age_density.png"),
+  age_plot,
+  width = 7,
+  height = 4.5
+)
+ggsave(
+  here("graphics", "farnaz_gender_counts.png"),
+  gender_plot,
+  width = 7,
+  height = 4.5
+)
+ggsave(
+  here("graphics", "farnaz_ethnicity_detail.png"),
+  ethnicity_plot,
+  width = 7,
+  height = 4.5
+)
+```
+
+The density curves compare the shapes of the age distributions without letting
+the larger gender group dominate only because it has more observations. The
+ordered horizontal bars make the most and least frequent categories easy to
+identify. I would keep `ethnicity_2` and remove `ethnicity_1`, because the more
+detailed labels are more useful for describing the sample.
+
+# Exercise 3
+
+```{r exercise-3, fig.width=7.5, fig.height=4.8}
+diet_summary <- diet %>%
+  group_by(Week) %>%
+  summarise(
+    mean_weight = mean(Weight),
+    sd_weight = sd(Weight),
+    .groups = "drop"
+  )
+
+ggplot(diet_summary, aes(Week, mean_weight)) +
+  geom_ribbon(
+    aes(
+      ymin = mean_weight - sd_weight,
+      ymax = mean_weight + sd_weight
+    ),
+    fill = "#E69F00",
+    alpha = 0.25
+  ) +
+  geom_line(colour = "#D55E00", linewidth = 1.1) +
+  geom_point(colour = "#D55E00") +
+  labs(
+    title = "Mean weight declines over the 16-week study",
+    subtitle = "Ribbon shows one standard deviation around the weekly mean",
+    x = "Week",
+    y = "Mean weight"
+  ) +
+  theme_light()
+```
+
+The original figure used one colour per participant, which produced a long
+legend. I summarized by week so that the mean line communicates the typical
+trajectory while the ribbon keeps information about participant variation.
+
+# Exercise 4
+
+```{r exercise-4, fig.width=9, fig.height=5}
+bp <- nhanes_data %>%
+  mutate(
+    readings_available = rowSums(
+      !is.na(across(starts_with("systolic_bp_")))
+    ),
+    avg_sbp = rowMeans(
+      across(starts_with("systolic_bp_")),
+      na.rm = TRUE
+    ),
+    avg_sbp = if_else(
+      readings_available == 0,
+      NA_real_,
+      avg_sbp
+    ),
+    sbp_group = case_when(
+      avg_sbp < 120 ~ "Normal",
+      avg_sbp < 130 ~ "Elevated",
+      avg_sbp < 140 ~ "Stage 1",
+      TRUE ~ "Stage 2"
+    ),
+    age_group = cut(
+      age,
+      breaks = seq(0, 90, by = 5),
+      right = FALSE,
+      include.lowest = TRUE
+    )
+  ) %>%
+  filter(!is.na(age), !is.na(gender), !is.na(avg_sbp))
+
+ggplot(bp, aes(age_group, fill = sbp_group)) +
+  geom_bar(position = "dodge") +
+  facet_grid(. ~ gender) +
+  scale_fill_manual(
+    values = c(
+      "Normal" = "#56B4E9",
+      "Elevated" = "#E69F00",
+      "Stage 1" = "#D55E00",
+      "Stage 2" = "#CC79A7"
+    )
+  ) +
+  labs(
+    title = "Counts of SBP categories by age and gender",
+    x = "Age group",
+    y = "Count",
+    fill = "Average SBP"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The complete-case filter means that the distributions describe participants
+with age, gender, and at least one systolic blood pressure reading. Faceting and
+the ordered colour palette make the age and gender patterns easier to compare.
+
